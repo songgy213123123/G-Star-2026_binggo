@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Live Keyword Bingo</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root{
+      --bg:#f6f7fb; --card:#fff; --text:#111827; --muted:#6b7280;
+      --line:#e5e7eb; --primary:#111827; --accent:#2563eb; --ok:#10b981;
+      --danger:#ef4444; --warn:#f59e0b;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:Arial,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+      background:var(--bg); color:var(--text);
+    }
+    button,input{font:inherit}
+    .wrap{max-width:980px;margin:0 auto;padding:20px}
+    .card{
+      background:var(--card); border:1px solid var(--line); border-radius:20px;
+      padding:22px; box-shadow:0 8px 28px rgba(0,0,0,.05); margin-bottom:16px;
+    }
+    h1,h2,h3,p{margin-top:0}
+    h1{font-size:30px;margin-bottom:8px}
+    .muted{color:var(--muted)}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .grow{flex:1}
+    input[type="text"]{
+      width:100%; padding:14px 15px; border:1px solid var(--line);
+      border-radius:12px; outline:none; background:#fff;
+    }
+    input[type="text"]:focus{border-color:var(--accent)}
+    .btn{
+      border:0; border-radius:12px; padding:13px 17px; cursor:pointer;
+      font-weight:700; background:var(--primary); color:#fff;
+    }
+    .btn.secondary{background:#eef2ff;color:#3730a3}
+    .btn.ok{background:var(--ok)}
+    .btn.danger{background:var(--danger)}
+    .btn.warn{background:var(--warn)}
+    .btn:disabled{opacity:.45;cursor:not-allowed}
+    .hidden{display:none!important}
+    .topbar{
+      display:flex; justify-content:space-between; align-items:center; gap:12px;
+      margin-bottom:14px;
+    }
+    .badge{
+      display:inline-block; padding:7px 11px; border-radius:999px;
+      background:#eef2ff; color:#3730a3; font-size:13px; font-weight:700;
+    }
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    .stat{padding:18px;border-radius:16px;background:#f9fafb;border:1px solid var(--line)}
+    .stat b{display:block;font-size:32px}
+    .bingo-grid{
+      display:grid; grid-template-columns:repeat(4,1fr); gap:7px; margin-top:16px;
+    }
+    .cell{
+      aspect-ratio:1/1; min-width:0; border:1px solid var(--line); border-radius:12px;
+      display:flex; align-items:center; justify-content:center; text-align:center;
+      padding:6px; font-size:13px; font-weight:700; background:#fff; overflow:hidden;
+    }
+    .cell input{
+      width:100%; height:100%; border:0; outline:none; text-align:center;
+      background:transparent; font-size:13px; font-weight:700;
+    }
+    .cell.clickable{cursor:pointer}
+    .cell.called{border-color:#93c5fd;background:#eff6ff}
+    .cell.checked{background:#111827;color:#fff;border-color:#111827}
+    .cell.locked:not(.called):not(.checked){opacity:.55}
+    .progress{
+      height:10px;background:#eef2f7;border-radius:999px;overflow:hidden;margin:10px 0 2px;
+    }
+    .progress > div{height:100%;background:var(--accent);width:0%}
+    .people{
+      display:flex;gap:8px;flex-wrap:wrap;max-height:240px;overflow:auto
+    }
+    .person{
+      background:#f3f4f6;border-radius:999px;padding:8px 11px;font-size:13px
+    }
+    .person.ready{background:#dcfce7;color:#166534}
+    .announce{
+      text-align:center;padding:34px 10px;border-radius:18px;
+      background:linear-gradient(135deg,#111827,#374151);color:#fff
+    }
+    .announce .winner{font-size:42px;font-weight:900;margin:12px 0}
+    .call-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .call-chip{background:#eff6ff;color:#1d4ed8;border-radius:999px;padding:8px 11px;font-size:13px}
+    .small{font-size:12px}
+    .dashboard h1{font-size:44px}
+    .dashboard .stat b{font-size:48px}
+    .dashboard .card{padding:30px}
+    .dashboard .people{max-height:none}
+    .status-line{font-weight:800;margin:10px 0}
+
+    .keyword-form{
+      display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px;
+    }
+    .keyword-entry{
+      display:flex; align-items:center; gap:9px; border:1px solid var(--line);
+      background:#fff; border-radius:12px; padding:7px 10px;
+    }
+    .keyword-no{
+      flex:0 0 26px; width:26px; height:26px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      background:#f3f4f6; color:#6b7280; font-size:12px; font-weight:800;
+    }
+    .keyword-entry input{
+      min-width:0; border:0!important; padding:9px 2px!important;
+      font-size:16px!important; background:transparent!important;
+    }
+
+
+    .entry-cell{padding:2px}
+    .entry-cell input{
+      width:100%;height:100%;border:0!important;outline:none;text-align:center;
+      background:transparent!important;font-size:16px!important;font-weight:700;
+      padding:4px!important;
+    }
+    @media (max-width:640px){
+      .wrap{padding:12px}
+      .card{padding:16px;border-radius:16px}
+      .stats{grid-template-columns:1fr}
+      h1{font-size:25px}
+      .cell{font-size:11px;border-radius:9px;padding:3px}
+      .cell input{font-size:11px}
+      .dashboard h1{font-size:30px}
+      .dashboard .stat b{font-size:36px}
+
+
+    }
+  </style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+
+<script>
+/* =========================================================
+   1) 아래 두 값을 본인의 Supabase 값으로 변경하세요.
+   ========================================================= */
+const SUPABASE_URL = "https://mzitkguswhnwsaxenhbw.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_JFFfroho0Nb7703eyclV9Q_s8AzpIsO";
+
+/* 게임 코드: 행사별로 바꾸면 같은 DB에서도 여러 게임 운영 가능 */
+const GAME_CODE = "g-star-2026-bingo";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const app = document.getElementById("app");
+
+const qs = new URLSearchParams(location.search);
+const mode = qs.get("mode") || "play"; // play | dashboard | admin
+
+let me = null;
+let currentGame = null;
+let participants = [];
+let calledKeywords = [];
+let winnerQueue = [];
+let channel = null;
+
+function norm(s){
+  return (s || "").trim().toLowerCase().replace(/\s+/g," ");
+}
+function esc(s){
+  return (s ?? "").replace(/[&<>"']/g, m => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[m]));
+}
+function uid(){
+  return crypto.randomUUID ? crypto.randomUUID() :
+    "id-"+Date.now()+"-"+Math.random().toString(36).slice(2);
+}
+function getClientId(){
+  let id = localStorage.getItem("bingo_client_id");
+  if(!id){ id = uid(); localStorage.setItem("bingo_client_id", id); }
+  return id;
+}
+function draftKey(){
+  return "bingo_draft_" + GAME_CODE + "_" + getClientId();
+}
+function saveDraft(board){
+  try { localStorage.setItem(draftKey(), JSON.stringify(board)); } catch(e){}
+}
+function loadDraft(){
+  try{
+    const v = JSON.parse(localStorage.getItem(draftKey()) || "null");
+    return Array.isArray(v) && v.length === 16 ? v : null;
+  }catch(e){ return null; }
+}
+function clearDraft(){
+  try { localStorage.removeItem(draftKey()); } catch(e){}
+}
+function isEditingBoard(){
+  return mode === "play" && me && !me.ready;
+}
+
+function countBingo(checked){
+  const lines = [];
+  for(let r=0;r<4;r++) lines.push([0,1,2,3].map(c=>r*4+c));
+  for(let c=0;c<4;c++) lines.push([0,1,2,3].map(r=>r*4+c));
+  lines.push([0,5,10,15]);
+  lines.push([3,6,9,12]);
+  return lines.filter(line => line.every(i => checked[i])).length;
+}
+function allFilled(board){ return board.length===16 && board.every(x => (x||"").trim()); }
+
+async function ensureGame(){
+  const {data, error} = await sb.from("bingo_games").select("*").eq("game_code",GAME_CODE).maybeSingle();
+  if(error) throw error;
+  if(data){ currentGame=data; return; }
+
+  const {data:created, error:e2} = await sb.from("bingo_games").insert({
+    game_code: GAME_CODE,
+    status: "waiting",
+    bingo_target: 1
+  }).select().single();
+  if(e2) throw e2;
+  currentGame=created;
+}
+async function fetchAll(){
+  await ensureGame();
+  const [{data:p},{data:c},{data:w}] = await Promise.all([
+    sb.from("bingo_participants").select("*").eq("game_code",GAME_CODE).order("created_at"),
+    sb.from("bingo_calls").select("*").eq("game_code",GAME_CODE).order("created_at"),
+    sb.from("bingo_winners").select("*").eq("game_code",GAME_CODE).order("created_at",{ascending:false}).limit(20)
+  ]);
+  participants = p || [];
+  calledKeywords = c || [];
+  winnerQueue = w || [];
+  const mine = participants.find(x => x.client_id === getClientId());
+  if(mine) {
+    me=mine;
+    if (!Array.isArray(me.board) || me.board.length !== 16) {
+      const freshBoard = Array(16).fill("");
+      const freshChecked = Array(16).fill(false);
+      const {data:fixed} = await sb.from("bingo_participants")
+        .update({board:freshBoard,checked:freshChecked,ready:false,bingo_count:0})
+        .eq("id",me.id).select().single();
+      if(fixed) {
+        me=fixed;
+        participants = participants.map(p => p.id===fixed.id ? fixed : p);
+      }
+    }
+    if(me && !me.ready){
+      const draft = loadDraft();
+      if(draft) me = {...me, board:draft};
+    }
+  }
+}
+async function subscribe(){
+  if(channel) await sb.removeChannel(channel);
+  async function realtimeRefresh(){
+    const editing = isEditingBoard();
+    const draft = editing ? ([...me.board]) : null;
+    await fetchAll();
+    if(editing && me){
+      me = {...me, board: draft || loadDraft() || me.board};
+      return; // 작성 중에는 DOM을 다시 그리지 않아 키보드/입력값 유지
+    }
+    render();
+  }
+
+  channel = sb.channel("bingo-live-"+GAME_CODE)
+    .on("postgres_changes",{event:"*",schema:"public",table:"bingo_games",filter:`game_code=eq.${GAME_CODE}`}, realtimeRefresh)
+    .on("postgres_changes",{event:"*",schema:"public",table:"bingo_participants",filter:`game_code=eq.${GAME_CODE}`}, realtimeRefresh)
+    .on("postgres_changes",{event:"*",schema:"public",table:"bingo_calls",filter:`game_code=eq.${GAME_CODE}`}, realtimeRefresh)
+    .on("postgres_changes",{event:"*",schema:"public",table:"bingo_winners",filter:`game_code=eq.${GAME_CODE}`}, realtimeRefresh)
+    .subscribe();
+}
+
+async function enterGame(nickname){
+  nickname = nickname.trim();
+  if(!nickname) return alert("닉네임을 입력해주세요.");
+  const clientId = getClientId();
+
+  const {data:existing} = await sb.from("bingo_participants")
+    .select("*").eq("game_code",GAME_CODE).eq("client_id",clientId).maybeSingle();
+
+  if(existing){
+    const {data,error} = await sb.from("bingo_participants")
+      .update({nickname,last_seen:new Date().toISOString()})
+      .eq("id",existing.id).select().single();
+    if(error) return alert(error.message);
+    me=data;
+  }else{
+    const {data,error} = await sb.from("bingo_participants").insert({
+      game_code:GAME_CODE, client_id:clientId, nickname,
+      board:Array(16).fill(""), checked:Array(16).fill(false),
+      ready:false, bingo_count:0
+    }).select().single();
+    if(error) return alert(error.message);
+    me=data;
+  }
+  await fetchAll();
+  if(me && !me.ready){
+    const draft = loadDraft();
+    if(draft) me = {...me, board:draft};
+  }
+  render();
+}
+async function saveBoard(board){
+  const {data,error} = await sb.from("bingo_participants")
+    .update({board,last_seen:new Date().toISOString()}).eq("id",me.id).select().single();
+  if(error) return alert(error.message);
+  me=data;
+}
+async function setReady(board){
+  if(!allFilled(board)) return alert("16개의 키워드를 모두 입력해주세요.");
+  const normalized = board.map(norm);
+  const duplicateIndexes = normalized
+    .map((x,i) => x && normalized.indexOf(x) !== i ? i : -1)
+    .filter(i => i >= 0);
+  const duplicateKeys = [...new Set(
+    duplicateIndexes.map(i => board[i].trim())
+  )];
+  if(duplicateKeys.length) {
+    return alert("중복된 키워드: " + duplicateKeys.join(", ") + "\n\n중복된 키워드를 수정해주세요.");
+  }
+
+  const {data,error} = await sb.from("bingo_participants")
+    .update({board,ready:true,last_seen:new Date().toISOString()})
+    .eq("id",me.id).select().single();
+  if(error) return alert(error.message);
+  me=data;
+  clearDraft();
+  await fetchAll(); render();
+}
+async function toggleCell(index){
+  if(!me.ready || currentGame.status!=="playing") return;
+  const keyword = me.board[index];
+  const isCalled = calledKeywords.some(x => norm(x.keyword)===norm(keyword));
+  if(!isCalled) return;
+
+  const checked = [...me.checked];
+  checked[index] = !checked[index];
+  const bingoCount = countBingo(checked);
+
+  const {data,error} = await sb.from("bingo_participants")
+    .update({checked,bingo_count:bingoCount,last_seen:new Date().toISOString()})
+    .eq("id",me.id).select().single();
+  if(error) return alert(error.message);
+  const before = me.bingo_count || 0;
+  me=data;
+
+  if(bingoCount >= 1 && before < 1){
+    const {data:exists} = await sb.from("bingo_winners")
+      .select("id").eq("game_code",GAME_CODE).eq("participant_id",me.id).maybeSingle();
+    if(!exists){
+      await sb.from("bingo_winners").insert({
+        game_code:GAME_CODE, participant_id:me.id, nickname:me.nickname, bingo_count:bingoCount
+      });
+    }
+  }
+  await fetchAll(); render();
+}
+
+function playLoginView(){
+  return `
+  <div class="card" style="margin-top:7vh">
+    <div class="badge">LIVE EVENT</div>
+    <h1 style="margin-top:12px">Keyword Bingo</h1>
+    <p class="muted">닉네임을 입력하고 입장해주세요.</p>
+    <div class="row">
+      <input id="nickname" class="grow" type="text" maxlength="20" placeholder="닉네임 입력">
+      <button class="btn" id="enterBtn">입장하기</button>
+    </div>
+    <p class="small muted" style="margin-top:12px">같은 휴대폰에서는 다시 접속해도 기존 빙고판을 이어서 사용할 수 있습니다.</p>
+  </div>`;
+}
+function playBoardView(){
+  const board = Array.isArray(me.board) ? me.board : Array(16).fill("");
+  const checked = Array.isArray(me.checked) ? me.checked : Array(16).fill(false);
+  const calledSet = new Set(calledKeywords.map(x=>norm(x.keyword)));
+  const statusText = !me.ready ? "키워드 16개를 입력해주세요."
+    : currentGame.status==="waiting" ? "준비 완료! 게임 시작을 기다려주세요."
+    : currentGame.status==="playing" ? "사회자가 부른 키워드를 터치하세요."
+    : "게임이 종료되었습니다.";
+
+  const cells = board.map((word,i)=>{
+    if(!me.ready){
+      return `<div class="cell entry-cell">
+        <input data-i="${i}" class="boardInput" maxlength="24"
+          value="${esc(word)}" placeholder="${i+1}" autocomplete="off"
+          enterkeyhint="${i===15 ? 'done' : 'next'}">
+      </div>`;
+    }
+    const called = calledSet.has(norm(word));
+    const cls = ["cell", called?"called":"", checked[i]?"checked":"", 
+      currentGame.status==="playing"&&called?"clickable":"locked"].join(" ");
+    return `<div class="${cls}" data-cell="${i}">${checked[i]?"✓ ":""}${esc(word)}</div>`;
+  }).join("");
+
+  return `
+    <div class="topbar">
+      <div>
+        <div class="badge">${esc(me.nickname)}</div>
+        <h1 style="margin-top:10px;margin-bottom:2px">Keyword Bingo</h1>
+        <div class="muted">${esc(statusText)}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="badge">${me.ready ? (currentGame.status==="playing" ? "게임 진행 중" : "준비 완료") : "작성 중"}</div>
+      </div>
+    </div>
+
+    ${winnerQueue[0] && winnerQueue[0].participant_id===me.id ? `
+    <div class="announce card">
+      <div>🎉 BINGO! 🎉</div>
+      <div class="winner">${esc(me.nickname)}</div>
+      <div>축하합니다!</div>
+    </div>`:""}
+
+    <div class="card">
+      <div class="status-line">${me.ready ? "✅ 준비 완료" : "✍️ 빙고판 작성 중"}</div>
+      <div class="bingo-grid">${cells}</div>
+      ${!me.ready ? `
+        <p class="small muted" style="margin-top:12px">16개의 키워드를 입력해주세요. 동일한 키워드는 중복 입력할 수 없습니다.</p>
+        <button class="btn ok" style="width:100%;margin-top:8px" id="readyBtn">준비 완료</button>
+      ` : `
+        <div style="margin-top:16px">
+          <div class="small muted">호출된 키워드</div>
+          <div class="call-list">
+            ${calledKeywords.length ? calledKeywords.map(x=>`<span class="call-chip">${esc(x.keyword)}</span>`).join("") : `<span class="muted small">아직 호출된 키워드가 없습니다.</span>`}
+          </div>
+        </div>
+      `}
+    </div>`;
+}
+function renderPlay(){
+  app.className="wrap";
+  app.innerHTML = me ? playBoardView() : playLoginView();
+
+  if(!me){
+    document.getElementById("enterBtn").onclick=()=>enterGame(document.getElementById("nickname").value);
+    document.getElementById("nickname").addEventListener("keydown",e=>{if(e.key==="Enter") document.getElementById("enterBtn").click();});
+    return;
+  }
+
+  const inputs = [...document.querySelectorAll(".boardInput")];
+  inputs.forEach((el, idx)=>{
+    el.addEventListener("input",()=>{
+      const board = [...me.board];
+      board[Number(el.dataset.i)] = el.value;
+      me.board=board;
+      saveDraft(board);
+    });
+
+    // 모바일 키보드의 '다음' 버튼으로 다음 칸 이동.
+    // 화면을 다시 렌더링하지 않으므로 키보드가 닫히지 않습니다.
+    el.addEventListener("keydown",(e)=>{
+      if(e.key === "Enter"){
+        e.preventDefault();
+        if(idx < inputs.length-1){
+          inputs[idx+1].focus();
+        }else{
+          el.blur();
+        }
+      }
+    });
+  });
+  document.getElementById("readyBtn")?.addEventListener("click",()=>setReady([...me.board]));
+  document.querySelectorAll("[data-cell]").forEach(el=>el.onclick=()=>toggleCell(Number(el.dataset.cell)));
+}
+
+function dashboardHtml(){
+  const ready = participants.filter(x=>x.ready).length;
+  const waiting = participants.length-ready;
+  const latestWinner = winnerQueue[0];
+  return `
+  <div class="dashboard">
+    <div class="topbar">
+      <div>
+        <div class="badge">LIVE DASHBOARD</div>
+        <h1 style="margin-top:10px">Keyword Bingo</h1>
+      </div>
+      <div class="badge">${currentGame.status==="playing"?"게임 진행 중":currentGame.status==="ended"?"게임 종료":"입장/준비 중"}</div>
+    </div>
+
+    ${latestWinner ? `
+      <div class="announce card">
+        <div style="font-size:24px">🎉 BINGO! 🎉</div>
+        <div class="winner">${esc(latestWinner.nickname)}</div>
+        <div style="font-size:22px">축하합니다!</div>
+      </div>` : ""}
+
+    <div class="card">
+      <div class="stats">
+        <div class="stat"><span class="muted">참가자</span><b>${participants.length}</b></div>
+        <div class="stat"><span class="muted">준비 완료</span><b>${ready}</b></div>
+        <div class="stat"><span class="muted">준비 중</span><b>${waiting}</b></div>
+      </div>
+      <div class="progress"><div style="width:${participants.length?Math.round(ready/participants.length*100):0}%"></div></div>
+      <p class="small muted">${participants.length?Math.round(ready/participants.length*100):0}% 준비 완료</p>
+    </div>
+
+    <div class="card">
+      <h2>참가 현황</h2>
+      <div class="people">
+        ${participants.length ? participants.map(p=>`<span class="person ${p.ready?"ready":""}">${p.ready?"✓ ":""}${esc(p.nickname)}</span>`).join("") : `<span class="muted">아직 참가자가 없습니다.</span>`}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>호출된 키워드</h2>
+      <div class="call-list">
+        ${calledKeywords.length ? calledKeywords.map(x=>`<span class="call-chip">${esc(x.keyword)}</span>`).join("") : `<span class="muted">아직 호출된 키워드가 없습니다.</span>`}
+      </div>
+    </div>
+  </div>`;
+}
+function renderDashboard(){
+  app.className="wrap";
+  app.innerHTML=dashboardHtml();
+}
+
+async function callKeyword(){
+  const el=document.getElementById("callKeyword");
+  const keyword=el.value.trim();
+  if(!keyword) return;
+  if(calledKeywords.some(x=>norm(x.keyword)===norm(keyword))) return alert("이미 호출한 키워드입니다.");
+  const {error}=await sb.from("bingo_calls").insert({game_code:GAME_CODE,keyword});
+  if(error) return alert(error.message);
+  el.value="";
+}
+async function updateGame(patch){
+  const {error}=await sb.from("bingo_games").update(patch).eq("game_code",GAME_CODE);
+  if(error) alert(error.message);
+}
+async function resetGame(){
+  if(!confirm("참가자 빙고판, 호출 키워드, 당첨 기록을 모두 초기화할까요?")) return;
+  await sb.from("bingo_winners").delete().eq("game_code",GAME_CODE);
+  await sb.from("bingo_calls").delete().eq("game_code",GAME_CODE);
+  await sb.from("bingo_participants").delete().eq("game_code",GAME_CODE);
+  clearDraft();
+  await updateGame({status:"waiting",bingo_target:1});
+}
+function renderAdmin(){
+  const ready=participants.filter(x=>x.ready).length;
+  app.className="wrap";
+  app.innerHTML=`
+    <div class="topbar">
+      <div>
+        <div class="badge">ADMIN</div>
+        <h1 style="margin-top:10px">Bingo Control</h1>
+      </div>
+      <span class="badge">${esc(currentGame.status)}</span>
+    </div>
+
+    <div class="card">
+      <div class="stats">
+        <div class="stat"><span class="muted">참가자</span><b>${participants.length}</b></div>
+        <div class="stat"><span class="muted">준비 완료</span><b>${ready}</b></div>
+        <div class="stat"><span class="muted">준비 중</span><b>${participants.length-ready}</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>게임 설정</h2>
+      <div class="row">
+        <button class="btn ok" id="startBtn">게임 시작</button>
+        <button class="btn warn" id="waitBtn">대기 상태</button>
+        <button class="btn secondary" id="endBtn">게임 종료</button>
+        <button class="btn danger" id="resetBtn">전체 초기화</button>
+      </div>
+      <div style="margin-top:16px">
+        <span class="badge">당첨 기준: 1줄 빙고</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>키워드 호출</h2>
+      <div class="row">
+        <input id="callKeyword" class="grow" type="text" placeholder="예: Gemini">
+        <button class="btn" id="callBtn">키워드 호출</button>
+      </div>
+      <div class="call-list">
+        ${calledKeywords.map(x=>`<span class="call-chip">${esc(x.keyword)}</span>`).join("") || `<span class="muted small">아직 호출된 키워드가 없습니다.</span>`}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>당첨자</h2>
+      <div class="people">
+        ${winnerQueue.length ? winnerQueue.map(w=>`<span class="person ready">🏆 ${esc(w.nickname)} · ${w.bingo_count}줄</span>`).join("") : `<span class="muted">아직 당첨자가 없습니다.</span>`}
+      </div>
+    </div>
+  `;
+
+  document.getElementById("startBtn").onclick=()=>updateGame({status:"playing"});
+  document.getElementById("waitBtn").onclick=()=>updateGame({status:"waiting"});
+  document.getElementById("endBtn").onclick=()=>updateGame({status:"ended"});
+  document.getElementById("resetBtn").onclick=resetGame;
+  document.getElementById("callBtn").onclick=callKeyword;
+  document.getElementById("callKeyword").addEventListener("keydown",e=>{if(e.key==="Enter") callKeyword();});
+
+}
+
+function render(){
+  if(mode==="dashboard") return renderDashboard();
+  if(mode==="admin") return renderAdmin();
+  renderPlay();
+}
+
+(async function init(){
+  try{
+    if(SUPABASE_URL.includes("YOUR_") || SUPABASE_ANON_KEY.includes("YOUR_")){
+      app.innerHTML = `<div class="card" style="margin-top:10vh">
+        <h1>Supabase 설정이 필요합니다</h1>
+        <p class="muted">HTML 상단의 <b>SUPABASE_URL</b>과 <b>SUPABASE_ANON_KEY</b> 값을 먼저 입력해주세요.</p>
+        <p class="small">같이 제공된 supabase_setup.sql을 Supabase SQL Editor에서 실행하면 됩니다.</p>
+      </div>`;
+      return;
+    }
+    await fetchAll();
+    await subscribe();
+    render();
+    setInterval(async()=>{
+      try{
+        if(me && !isEditingBoard()) await sb.from("bingo_participants").update({last_seen:new Date().toISOString()}).eq("id",me.id);
+      }catch(e){}
+    },30000);
+  }catch(e){
+    console.error(e);
+    app.innerHTML=`<div class="card"><h2>연결 오류</h2><p>${esc(e.message)}</p></div>`;
+  }
+})();
+</script>
+</body>
+</html>
